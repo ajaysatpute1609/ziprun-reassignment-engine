@@ -35,6 +35,29 @@
     </div>
   </section>
 
+  <section class="panel" *ngIf="streamingOrderId">
+    <div class="stream-header">
+      <h2>Live AI Reasoning — {{ streamingOrderId }}</h2>
+      <button class="btn-small" (click)="closeStreamingPanel()">Close</button>
+    </div>
+    <div class="stream-text">{{ streamingText }}<span class="cursor" *ngIf="!streamingSuggestion">▍</span></div>
+    <div class="banner error" *ngIf="streamingNote">{{ streamingNote }}</div>
+    <div class="stream-result" *ngIf="streamingSuggestion">
+      Final: <strong>{{ agentName(streamingSuggestion.recommendedAgentId) }}</strong>
+      (confidence {{ (streamingSuggestion.confidence * 100).toFixed(0) }}%) — persisted as a pending suggestion above.
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Assigned Orders — Trigger AI Suggestion</h2>
+    <div *ngIf="!assignedOrders().length" class="empty">No assigned orders right now.</div>
+    <div class="order-row" *ngFor="let o of assignedOrders()">
+      <span class="order-id">{{ o.id }}</span>
+      <span class="order-row-desc">{{ o.description }}</span>
+      <button class="btn-small" (click)="streamSuggestion(o.id)">Stream AI Suggestion</button>
+    </div>
+  </section>
+
   <section class="panel">
     <h2>Agent Roster</h2>
     <table class="agent-table">

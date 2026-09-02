@@ -1,5 +1,9 @@
 package com.ziprun.reassignment.service;
 
+import com.ziprun.reassignment.ai.LLMGateway;
+import com.ziprun.reassignment.ai.LLMResponseParser;
+import com.ziprun.reassignment.ai.LLMSuggestion;
+import com.ziprun.reassignment.ai.PromptBuilder;
 import com.ziprun.reassignment.domain.*;
 import com.ziprun.reassignment.repository.AgentRepository;
 import com.ziprun.reassignment.repository.OrderRepository;
@@ -13,7 +17,9 @@ import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
  * Single entry point for turning "an order needs a routing decision" into a
@@ -32,17 +38,31 @@ public class ReassignmentService {
   private final RoutingStrategyResolver strategyResolver;
   private final AgentEligibilityFilter eligibilityFilter;
 
+  // Used only by the SSE streaming bonus endpoint (streamSuggestion below).
+  // Deliberately AI-specific, unlike the rest of this class, because
+  // "stream tokens as they arrive" isn't expressible through the
+  // synchronous RoutingStrategy contract — see SPRINT2-ADR-5.
+  private final PromptBuilder promptBuilder;
+  private final LLMGateway llmGateway;
+  private final LLMResponseParser responseParser;
+
   public ReassignmentService(
       AgentRepository agentRepository,
       OrderRepository orderRepository,
       ReassignmentSuggestionRepository suggestionRepository,
       RoutingStrategyResolver strategyResolver,
-      AgentEligibilityFilter eligibilityFilter) {
+      AgentEligibilityFilter eligibilityFilter,
+      PromptBuilder promptBuilder,
+      LLMGateway llmGateway,
+      LLMResponseParser responseParser) {
     this.agentRepository = agentRepository;
     this.orderRepository = orderRepository;
     this.suggestionRepository = suggestionRepository;
     this.strategyResolver = strategyResolver;
     this.eligibilityFilter = eligibilityFilter;
+    this.promptBuilder = promptBuilder;
+    this.llmGateway = llmGateway;
+    this.responseParser = responseParser;
   }
 
   /**
@@ -81,20 +101,96 @@ public class ReassignmentService {
       recommendations = strategyResolver.fallback().recommend(order, eligibleAgents, context);
     }
 
-    AgentRecommendation top = recommendations.get(0);
+    return persist(order, recommendations.get(0), context.triggerReason());
+  }
 
+  private ReassignmentSuggestion persist(
+      Order order, AgentRecommendation top, TriggerReason triggerReason) {
     ReassignmentSuggestion suggestion = new ReassignmentSuggestion();
     suggestion.setOrderId(order.getId());
     suggestion.setRecommendedAgentId(top.agentId());
     suggestion.setConfidence(top.confidence());
     suggestion.setReasoning(top.reasoning());
     suggestion.setStatus(SuggestionStatus.PENDING);
-    suggestion.setTriggerReason(context.triggerReason());
+    suggestion.setTriggerReason(triggerReason);
 
     order.setStatus(OrderStatus.REASSIGNMENT_PENDING);
     orderRepository.save(order);
 
     return suggestionRepository.save(suggestion);
+  }
+
+  /**
+   * SSE streaming bonus (T-3): streams the AI's reasoning token-by-token to
+   * the emitter, then persists the final validated suggestion exactly like
+   * {@link #suggestForOrder} does. Falls back to the rule-based strategy
+   * (non-streamed) on any failure, consistent with ADR-3 — a streaming
+   * failure still produces a usable suggestion, never a silent drop.
+   *
+   * Runs on the same dedicated executor as the agentic loop so the HTTP
+   * thread that opened the SSE connection is freed immediately; the
+   * controller returns the {@link SseEmitter} right away and this method
+   * pushes events onto it asynchronously.
+   */
+  @Async("reassignmentExecutor")
+  public void streamSuggestion(String orderId, RoutingContext context, SseEmitter emitter) {
+    try {
+      Order order =
+          orderRepository
+              .findById(orderId)
+              .orElseThrow(() -> new IllegalArgumentException("Unknown order: " + orderId));
+
+      List<Agent> availableAgents = agentRepository.findByStatus(AgentStatus.AVAILABLE);
+      List<Agent> eligibleAgents = eligibilityFilter.eligibleFor(order, availableAgents);
+
+      if (eligibleAgents.isEmpty()) {
+        emitter.send(SseEmitter.event().name("error").data("No eligible agent"));
+        emitter.complete();
+        return;
+      }
+
+      String prompt = promptBuilder.build(order, eligibleAgents, context);
+      StringBuilder full = new StringBuilder();
+
+      try {
+        llmGateway.streamLLM(
+            prompt,
+            token -> {
+              full.append(token);
+              try {
+                emitter.send(SseEmitter.event().name("token").data(token));
+              } catch (Exception e) {
+                // Client likely disconnected — nothing more we can do for this token.
+                log.debug("Failed to emit token for order {}: {}", orderId, e.getMessage());
+              }
+            });
+
+        LLMSuggestion validated = responseParser.parseAndValidate(full.toString(), eligibleAgents);
+        ReassignmentSuggestion suggestion =
+            persist(
+                order,
+                new AgentRecommendation(
+                    validated.agentId(), validated.confidence(), validated.reasoning()),
+                context.triggerReason());
+
+        emitter.send(SseEmitter.event().name("suggestion").data(suggestion));
+        emitter.complete();
+      } catch (Exception e) {
+        log.warn(
+            "Streaming AI suggestion failed for order {}; falling back to rule-based: {}",
+            orderId,
+            e.getMessage());
+        AgentRecommendation fallback =
+            strategyResolver.fallback().recommend(order, eligibleAgents, context).get(0);
+        ReassignmentSuggestion suggestion = persist(order, fallback, context.triggerReason());
+
+        emitter.send(SseEmitter.event().name("fallback").data("AI streaming failed; used rule-based fallback"));
+        emitter.send(SseEmitter.event().name("suggestion").data(suggestion));
+        emitter.complete();
+      }
+    } catch (Exception e) {
+      emitter.completeWithError(e);
+    }
   }
 
   /**

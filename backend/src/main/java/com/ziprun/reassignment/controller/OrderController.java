@@ -15,8 +15,10 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 @RequestMapping("/orders")
@@ -66,5 +68,19 @@ public class OrderController {
     ReassignmentSuggestion suggestion =
         reassignmentService.suggestForOrder(id, RoutingContext.initial());
     return ResponseEntity.ok(suggestion);
+  }
+
+  /**
+   * Bonus (T-3, +5 pts): streams the AI's reasoning token-by-token via SSE
+   * before the final suggestion lands. Returns the emitter immediately —
+   * {@code ReassignmentService.streamSuggestion} runs asynchronously and
+   * pushes "token", "fallback" (if applicable), and a final "suggestion"
+   * event onto it.
+   */
+  @PostMapping(path = "/{id}/suggest/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+  public SseEmitter suggestStream(@PathVariable String id) {
+    SseEmitter emitter = new SseEmitter(120_000L);
+    reassignmentService.streamSuggestion(id, RoutingContext.initial(), emitter);
+    return emitter;
   }
 }

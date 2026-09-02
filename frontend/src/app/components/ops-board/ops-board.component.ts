@@ -20,7 +20,14 @@ export class OpsBoardComponent implements OnInit, OnDestroy {
   error = '';
   actionInFlight: number | null = null;
 
+  // SSE streaming bonus state
+  streamingOrderId: string | null = null;
+  streamingText = '';
+  streamingSuggestion: ReassignmentSuggestion | null = null;
+  streamingNote = '';
+
   private pollSub?: Subscription;
+  private readonly apiBaseUrl = 'http://localhost:8080';
 
   constructor(private api: ApiService) {}
 
@@ -120,5 +127,91 @@ export class OpsBoardComponent implements OnInit, OnDestroy {
       },
       error: () => (this.actionInFlight = null),
     });
+  }
+
+  assignedOrders(): Order[] {
+    return this.orders.filter((o) => o.status === 'ASSIGNED');
+  }
+
+  /**
+   * SSE streaming bonus (T-3, +5 pts): opens a streaming connection to
+   * /orders/{id}/suggest/stream and renders the AI's reasoning token by
+   * token as it arrives, before the final persisted suggestion lands.
+   * Uses fetch + a manual ReadableStream reader (rather than the native
+   * EventSource API) specifically so the request can be a POST, matching
+   * the endpoint verb used everywhere else in this app.
+   */
+  async streamSuggestion(orderId: string): Promise<void> {
+    this.streamingOrderId = orderId;
+    this.streamingText = '';
+    this.streamingSuggestion = null;
+    this.streamingNote = '';
+
+    try {
+      const response = await fetch(`${this.apiBaseUrl}/orders/${orderId}/suggest/stream`, {
+        method: 'POST',
+      });
+
+      if (!response.body) {
+        this.streamingNote = 'Streaming not supported by this browser/response.';
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let boundary: number;
+        while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+          const rawEvent = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          this.handleSseEvent(rawEvent);
+        }
+      }
+    } catch {
+      this.streamingNote = 'Streaming failed — is the backend reachable on :8080?';
+    }
+  }
+
+  closeStreamingPanel(): void {
+    this.streamingOrderId = null;
+  }
+
+  private handleSseEvent(rawEvent: string): void {
+    const lines = rawEvent.split('\n');
+    let eventName = 'message';
+    const dataLines: string[] = [];
+
+    for (const line of lines) {
+      if (line.startsWith('event:')) {
+        eventName = line.slice('event:'.length).trim();
+      } else if (line.startsWith('data:')) {
+        dataLines.push(line.slice('data:'.length).trim());
+      }
+    }
+    const data = dataLines.join('\n');
+
+    switch (eventName) {
+      case 'token':
+        this.streamingText += data;
+        break;
+      case 'suggestion':
+        try {
+          this.streamingSuggestion = JSON.parse(data);
+        } catch {
+          // ignore malformed final payload; token text is still shown
+        }
+        this.refresh();
+        break;
+      case 'fallback':
+      case 'error':
+        this.streamingNote = data;
+        break;
+    }
   }
 }

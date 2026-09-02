@@ -153,3 +153,60 @@ where a scheduled poller is the *right* tool (contrast with `main`'s
 `ADR-4`, which explicitly rejected polling for the OFFLINE trigger) —
 there's no discrete event to react to when the thing that changed is just
 elapsed time.
+
+---
+
+## SPRINT2-ADR-5: How does the SSE streaming bonus fit given the routing contract is synchronous?
+
+**Context.** The brief's bonus (T-3, +5 pts) asks for
+`POST /orders/{id}/suggest/stream`, streaming the LLM's reasoning
+token-by-token. `RoutingStrategy.recommend()` is a synchronous method
+returning a `List<AgentRecommendation>` — there's no way to stream partial
+output through that contract without changing its signature for every
+strategy, including the rule-based one, which has nothing to stream.
+
+**Options considered.**
+(a) Change `RoutingStrategy` to return something stream-shaped (e.g. a
+`Flux`/callback-based contract) — forces every implementation, including
+`RuleBasedRoutingStrategy` and `ZoneAffinityStrategy`, to deal with a
+streaming API they have no use for, and would require moving the whole app
+to a reactive stack (WebFlux) to do it idiomatically.
+(b) Keep `RoutingStrategy` synchronous exactly as-is, and implement
+streaming as a parallel, AI-specific code path in `ReassignmentService`
+(`streamSuggestion`) that talks directly to `LLMGateway`/`PromptBuilder`,
+bypassing the `RoutingStrategy` abstraction entirely for this one bonus
+endpoint.
+(c) Implement streaming as a completely separate service/controller,
+fully decoupled from `ReassignmentService` — avoids touching the main
+class at all, but duplicates the eligibility-filtering and persistence
+logic that `suggestForOrder` already has.
+
+**Decision.** Chose (b). `ReassignmentService` gained three new,
+deliberately AI-specific dependencies (`PromptBuilder`, `LLMGateway`,
+`LLMResponseParser`) and one new method, `streamSuggestion`, used only by
+`POST /orders/{id}/suggest/stream`. It reuses the same eligibility
+filtering and the same `persist()` helper as `suggestForOrder` (extracted
+during this change so both paths save a suggestion identically), and falls
+back to `strategyResolver.fallback()` — the same rule-based strategy — if
+streaming fails, consistent with ADR-3. Response parsing/validation was
+extracted into a shared `LLMResponseParser` so the streaming path and
+`AiRoutingStrategy` can never validate a hallucinated agent id differently.
+
+**Tradeoffs accepted.** This is the one place in the codebase where
+`ReassignmentService` — otherwise deliberately routing-strategy-agnostic —
+knows about AI specifics directly. That's a boundary violation relative to
+ADR-1's "routing logic lives behind the strategy interface" principle, kept
+deliberately narrow (one method, three fields) because streaming is
+fundamentally not expressible through the synchronous `RoutingStrategy`
+contract, and building a whole reactive parallel stack for a +5 bonus
+wasn't a justified tradeoff. If this became a permanent, load-bearing
+feature rather than a bonus, the right fix would be a dedicated
+`StreamingSuggestionService` sitting beside `ReassignmentService`, not
+inside it.
+
+**Verified live.** `curl -N -X POST /orders/ORD-001/suggest/stream` showed
+real token-by-token SSE output (individual JSON fragments like `agent`,
+`Id`, `":"`, `AG`, `T`, `-`, `002` arriving as separate `event: token`
+frames), followed by a final `event: suggestion` frame with the parsed,
+validated, and persisted result — confirmed present via
+`GET /suggestions` afterward.
