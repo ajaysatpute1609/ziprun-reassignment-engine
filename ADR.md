@@ -205,16 +205,19 @@ enum tied to one scenario.
   pure UX enhancement (watching tokens arrive) with zero effect on
   correctness; the agentic loop and its fallback behavior are a correctness
   requirement and got the time instead.
-- **UI ceiling (full dispatch board, SLA countdown, agent load chart, zone
-  roster) — not built.** The brief is explicit that this is primarily a
-  backend/systems design screen; a clean, fully-working floor (reassignment
-  queue, badges, accept/reject, agent roster, polling, loading/error states)
-  demonstrates the agentic loop end-to-end, which is the thing actually being
-  evaluated. An ambitious but partially-working ceiling would have traded
-  against backend robustness for a lower-weighted area.
-- **Capacity/weight-class constraints (sprint 2) — not built.** Both current
-  strategies assume any available agent can take any order. Adding
-  `Agent.maxCapacity` and `Order.weightClass` now would be pure speculative
-  schema without a strategy that reads them yet, which is exactly the kind of
-  premature complexity the brief warns against — better to add the column
-  when the strategy that needs it exists.
+- **Capacity/weight-class enforcement in routing (sprint 2) — visualized,
+  not enforced.** `Agent.maxCapacity`, `Agent.currentZone`, and
+  `Order.slaDeadline` were added and are surfaced on the dispatch board (load
+  bar, zone column, SLA countdown) once floor scope and the core agentic loop
+  were solid, because they demonstrate the extension seams concretely rather
+  than just describing them. But no routing strategy reads `maxCapacity` to
+  cap assignments, and nothing schedules against `slaDeadline` yet — that's
+  sprint 2/3 strategy work (`ZoneAffinityStrategy`, capacity checks,
+  proactive SLA-breach triggering), deliberately left alone since building an
+  unenforced field is cheap but building the strategy logic and the
+  scheduled-trigger plumbing correctly is not, and the agentic loop's
+  correctness was the higher priority with the time available.
+- **Full order-creation UI — not built.** Orders are seeded via `data.sql`
+  and can be created via `POST /orders`; there's no Angular form for it. The
+  floor's evaluation focus is the reassignment loop working end-to-end, not
+  order intake, so this was left as an API-only capability.

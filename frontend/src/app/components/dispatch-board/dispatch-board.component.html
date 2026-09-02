@@ -1,0 +1,61 @@
+<div class="dispatch">
+  <div *ngIf="error" class="banner error">{{ error }}</div>
+  <div *ngIf="loading && !agents.length" class="banner loading">Loading...</div>
+
+  <section class="panel">
+    <h2>Agent Roster — Zone &amp; Load</h2>
+    <table class="dispatch-table">
+      <thead>
+        <tr>
+          <th>Agent</th>
+          <th>Zone</th>
+          <th>Load</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let a of agents">
+          <td>{{ a.name }} <span class="muted">({{ a.id }})</span></td>
+          <td>{{ a.currentZone || '—' }}</td>
+          <td>
+            <div class="load-bar-track">
+              <div class="load-bar-fill" [ngClass]="loadClass(a)" [style.width.%]="loadPercent(a)"></div>
+            </div>
+            <span class="load-text">{{ a.activeOrderCount }} / {{ a.maxCapacity || '—' }}</span>
+          </td>
+          <td>
+            <span class="status-pill" [ngClass]="'status-' + a.status.toLowerCase()">{{ a.status }}</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <h2>Full Dispatch Board — All Orders</h2>
+    <table class="dispatch-table">
+      <thead>
+        <tr>
+          <th>Order</th>
+          <th>Description</th>
+          <th>Assigned Agent</th>
+          <th>Status</th>
+          <th>SLA</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let o of orders">
+          <td class="order-id">{{ o.id }}</td>
+          <td>{{ o.description }}</td>
+          <td>{{ agentName(o.assignedAgentId) }}</td>
+          <td>
+            <span class="status-pill" [ngClass]="statusClass(o.status)">{{ o.status }}</span>
+          </td>
+          <td>
+            <span class="sla-pill" [ngClass]="slaClass(o)">{{ slaLabel(o) }}</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+</div>

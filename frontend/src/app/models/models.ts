@@ -9,6 +9,7 @@ export interface Agent {
   activeOrderCount: number;
   status: AgentStatus;
   currentZone?: string | null;
+  maxCapacity?: number | null;
 }
 
 export interface Order {
@@ -17,6 +18,7 @@ export interface Order {
   assignedAgentId: string | null;
   status: OrderStatus;
   createdAt: string;
+  slaDeadline?: string | null;
 }
 
 export interface ReassignmentSuggestion {

@@ -1,0 +1,23 @@
+.view-tabs {
+  max-width: 1000px;
+  margin: 24px auto 0;
+  padding: 0 24px;
+  display: flex;
+  gap: 8px;
+}
+
+.view-tabs button {
+  padding: 10px 20px;
+  border: none;
+  background: #e5e7eb;
+  color: #4b5563;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.view-tabs button.active {
+  background: #0056b3;
+  color: #fff;
+}

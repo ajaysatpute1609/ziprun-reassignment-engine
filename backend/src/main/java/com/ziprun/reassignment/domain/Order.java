@@ -28,4 +28,11 @@ public class Order {
 
   @Column(name = "created_at", nullable = false)
   private Instant createdAt = Instant.now();
+
+  // Sprint 3 extension seam: proactive SLA-breach detection will read this
+  // and fire the agentic loop before a deadline is missed, not just on
+  // agent OFFLINE. Currently only surfaced for the dispatch board's
+  // countdown display — nothing schedules against it yet.
+  @Column(name = "sla_deadline")
+  private Instant slaDeadline;
 }

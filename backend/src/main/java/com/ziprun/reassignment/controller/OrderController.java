@@ -10,6 +10,7 @@ import com.ziprun.reassignment.routing.RoutingContext;
 import com.ziprun.reassignment.service.ReassignmentService;
 import jakarta.validation.Valid;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -45,6 +46,7 @@ public class OrderController {
     order.setAssignedAgentId(request.getAssignedAgentId());
     order.setStatus(OrderStatus.ASSIGNED);
     order.setCreatedAt(Instant.now());
+    order.setSlaDeadline(Instant.now().plus(45, ChronoUnit.MINUTES));
 
     return ResponseEntity.status(HttpStatus.CREATED).body(orderRepository.save(order));
   }

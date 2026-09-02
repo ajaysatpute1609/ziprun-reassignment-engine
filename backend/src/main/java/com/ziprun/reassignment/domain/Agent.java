@@ -29,4 +29,10 @@ public class Agent {
   // read this field. Nullable placeholder now avoids a migration later.
   @Column(name = "current_zone")
   private String currentZone;
+
+  // Sprint 2 extension seam: capacity-aware routing will enforce this limit.
+  // Currently only surfaced for the dispatch board's load visualization —
+  // not yet enforced by any routing strategy.
+  @Column(name = "max_capacity")
+  private Integer maxCapacity;
 }

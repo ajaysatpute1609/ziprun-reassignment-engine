@@ -1,2 +1,8 @@
-<app-ops-board></app-ops-board>
+<div class="view-tabs">
+  <button [class.active]="activeView === 'ops'" (click)="setView('ops')">Ops View</button>
+  <button [class.active]="activeView === 'dispatch'" (click)="setView('dispatch')">Full Dispatch Board</button>
+</div>
+
+<app-ops-board *ngIf="activeView === 'ops'"></app-ops-board>
+<app-dispatch-board *ngIf="activeView === 'dispatch'"></app-dispatch-board>
 <router-outlet></router-outlet>
