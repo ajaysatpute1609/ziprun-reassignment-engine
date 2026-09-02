@@ -24,17 +24,45 @@ public class LLMResponseParser {
   private final ObjectMapper objectMapper = new ObjectMapper();
 
   public LLMSuggestion parse(String raw) {
+    if (raw == null || raw.isBlank()) {
+      throw new IllegalStateException("LLM returned empty response");
+    }
     try {
-      String cleaned = raw.trim().replaceAll("^```(json)?", "").replaceAll("```$", "").trim();
+      String cleaned = extractJson(raw);
       JsonNode node = objectMapper.readTree(cleaned);
       String agentId = node.get("agentId").asText();
       double confidence = node.get("confidence").asDouble();
       String reasoning = node.get("reasoning").asText();
       return new LLMSuggestion(agentId, confidence, reasoning);
     } catch (Exception e) {
-      log.warn("Failed to parse LLM response as JSON: {}", raw);
+      log.warn("Failed to parse LLM response as JSON. Raw:\n{}", raw);
       throw new IllegalStateException("Unparseable LLM response", e);
     }
+  }
+
+  private String extractJson(String raw) {
+    String trimmed = raw.trim();
+
+    // If the response starts with a code fence, strip it.
+    if (trimmed.startsWith("```")) {
+      int firstNewline = trimmed.indexOf('\n');
+      if (firstNewline > 0) {
+        trimmed = trimmed.substring(firstNewline).trim();
+      }
+      if (trimmed.endsWith("```")) {
+        trimmed = trimmed.substring(0, trimmed.lastIndexOf("```")).trim();
+      }
+    }
+
+    // Find the first '{' and the last '}' to isolate a JSON object even if
+    // the model prefixes or suffixes the JSON with prose or explanation.
+    int firstBrace = trimmed.indexOf('{');
+    int lastBrace = trimmed.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      return trimmed.substring(firstBrace, lastBrace + 1);
+    }
+
+    return trimmed;
   }
 
   public LLMSuggestion parseAndValidate(String raw, java.util.List<Agent> eligibleAgents) {

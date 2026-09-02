@@ -159,10 +159,14 @@ public class LLMGateway {
   }
 
   private String callOpenAICompatible(String prompt, String url) {
+    // response_format forces the model to return valid JSON, not prose.
+    // This is especially important for the sync /suggest path used by both
+    // manual calls and the proactive SlaMonitor (SLA_AT_RISK).
     var body =
         Map.of(
             "model", model,
-            "messages", List.of(Map.of("role", "user", "content", prompt)));
+            "messages", List.of(Map.of("role", "user", "content", prompt)),
+            "response_format", Map.of("type", "json_object"));
 
     var resp =
         http.post()
