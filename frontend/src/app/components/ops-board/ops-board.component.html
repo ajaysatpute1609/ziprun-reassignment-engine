@@ -13,9 +13,7 @@
 
     <div class="suggestion-card" *ngFor="let s of suggestions">
       <div class="suggestion-top">
-        <span class="badge" [ngClass]="s.triggerReason === 'AGENT_OFFLINE' ? 'badge-auto' : 'badge-manual'">
-          {{ s.triggerReason === 'AGENT_OFFLINE' ? 'Auto re-plan' : 'Manual' }}
-        </span>
+        <span class="badge" [ngClass]="badgeClass(s)">{{ badgeLabel(s) }}</span>
         <span class="order-id">{{ s.orderId }}</span>
         <span class="confidence">Confidence: {{ (s.confidence * 100).toFixed(0) }}%</span>
       </div>

@@ -2,16 +2,18 @@ package com.ziprun.reassignment.ai;
 
 import com.ziprun.reassignment.domain.Agent;
 import com.ziprun.reassignment.domain.Order;
+import com.ziprun.reassignment.domain.TriggerReason;
 import com.ziprun.reassignment.routing.RoutingContext;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
 /**
- * Builds two genuinely different prompts (AGT-3) rather than one document
- * with a field appended. An initial assignment and a recovery from an agent
- * going offline call for different reasoning: the re-plan prompt is framed
- * as a situation report (what failed, what's stranded, why this is urgent),
- * not an updated order form.
+ * Builds a genuinely different prompt per trigger reason (AGT-3) rather than
+ * one document with a field appended. A first assignment, a recovery from
+ * an agent going offline, and a proactive SLA-risk warning are three
+ * different situations and should be reasoned about differently — the
+ * re-plan and SLA-risk prompts are framed as situation reports (what's
+ * happening, why it's urgent), not an updated order form.
  */
 @Component
 public class PromptBuilder {
@@ -24,7 +26,11 @@ public class PromptBuilder {
             + "{\"agentId\": \"<one of the ids above>\", \"confidence\": <0.0-1.0>, "
             + "\"reasoning\": \"<one or two plain-English sentences an ops person can act on>\"}";
 
-    if (context.triggerReason() == com.ziprun.reassignment.domain.TriggerReason.AGENT_OFFLINE) {
+    if (context.triggerReason() == TriggerReason.SLA_AT_RISK) {
+      return buildSlaAtRiskPrompt(order, orderMeta, roster, schema, context);
+    }
+
+    if (context.triggerReason() == TriggerReason.AGENT_OFFLINE) {
       return """
           SITUATION REPORT — AGENT OFFLINE RECOVERY
 
@@ -77,6 +83,41 @@ public class PromptBuilder {
         %s
         """
         .formatted(order.getId(), order.getDescription(), orderMeta, roster, schema);
+  }
+
+  private String buildSlaAtRiskPrompt(
+      Order order, String orderMeta, String roster, String schema, RoutingContext context) {
+    Integer mins = context.slaMinutesRemaining();
+    String urgency =
+        (mins != null && mins < 0)
+            ? "This order has ALREADY BREACHED its SLA deadline by " + Math.abs(mins) + " minutes."
+            : "This order has only " + mins + " minutes left before its SLA deadline breaches.";
+
+    return """
+        SITUATION REPORT — SLA BREACH RISK (PROACTIVE)
+
+        No agent has failed or gone offline. This is a proactive warning:
+        Order %s ("%s")%s is at risk of missing its delivery SLA. %s The
+        currently assigned agent has not been marked unavailable — they may
+        simply be overloaded, delayed, or slower than the delivery window
+        allows. This is not a recovery from a failure; it is an early
+        intervention to prevent one.
+
+        Available agents right now (id, current active order count, zone,
+        capacity, heavy-order capability):
+        %s
+
+        Recommend the single best available agent to take over this order
+        immediately, prioritizing agents who can realistically beat the
+        remaining time — lower current load and zone proximity matter more
+        here than usual, since time is the binding constraint. Do not
+        recommend an agent who cannot carry a HEAVY order if this order is
+        HEAVY. Explain your reasoning in terms an operations manager can act
+        on immediately, and mention the time pressure explicitly.
+
+        %s
+        """
+        .formatted(order.getId(), order.getDescription(), orderMeta, urgency, roster, schema);
   }
 
   private String formatOrderMeta(Order order) {

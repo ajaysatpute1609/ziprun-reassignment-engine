@@ -102,3 +102,54 @@ redundant — those agents are never in the roster the AI sees. It's kept
 anyway as defense-in-depth: if eligibility filtering is ever bypassed or
 has a bug, the prompt is a second, independent guard, and it costs nothing
 to include.
+
+---
+
+## SPRINT2-ADR-4: How does the proactive SLA-breach loop (sprint 3 preview) fit without restructuring the agentic loop?
+
+**Context.** `main`'s `ADR-5` explicitly named this as the thing to be able
+to point at: "is your event mechanism general enough to accept a new
+trigger type? Is your routing interface as comfortable being called from a
+scheduled monitor as from an event handler?" This entry answers that for
+real, not hypothetically — the proactive loop is built on this branch.
+
+**Options considered.**
+(a) Duplicate the reassignment pipeline for the SLA case — a separate
+`SlaReassignmentService` with its own suggestion-creation logic — keeps the
+two triggers fully independent but means any future change to fallback
+behavior, idempotency, or persistence has to be made twice.
+(b) Reuse `ReassignmentService.suggestForOrder()` as-is, feeding it a new
+`RoutingContext.slaAtRisk(minutesRemaining)`, with a new `SlaMonitor`
+`@Scheduled` component as the only new piece of trigger *mechanism*.
+(c) Extend `AgentOfflineEvent`/`AgentOfflineListener` to also mean "any
+reassignment trigger," renaming them generically — technically works, but
+conflates two conceptually different mechanisms (react-to-event vs.
+poll-on-a-timer) into one class, hurting readability.
+
+**Decision.** Chose (b). `SlaMonitor` is a new `@Scheduled(fixedRateString
+= "${sla.check.interval-ms}")` component, structurally parallel to
+`AgentOfflineListener` (observe → reason → act → checkpoint) but triggered
+by a clock instead of an event. It queries `OrderRepository.findByStatus(ASSIGNED)`,
+computes minutes remaining against `Order.slaDeadline`, and for any order
+within `sla.risk.threshold-minutes` (or already breached), calls the exact
+same `ReassignmentService.suggestForOrder()` used by both the HTTP
+`/suggest` endpoint and `AgentOfflineListener` — zero changes to that
+method, to `RoutingStrategyResolver`, or to any `RoutingStrategy`
+implementation. The only *new* production code is `SlaMonitor` itself, the
+`SLA_AT_RISK` enum value, and a third field on `RoutingContext`
+(`slaMinutesRemaining`) plus a third prompt shape in `PromptBuilder`. The
+idempotency guard is the same repository method used for
+`AGENT_OFFLINE` (`existsByOrderIdAndTriggerReasonAndStatus`), just called
+with a different `TriggerReason` — no new idempotency logic needed.
+
+**Tradeoffs accepted.** A scheduled poll is inherently less immediate than
+an event — an order could sit up to `sla.check.interval-ms` (30s in this
+config) past crossing the risk threshold before being noticed, whereas
+`AgentOfflineListener` reacts within milliseconds of the status change.
+For an SLA measured in tens of minutes, a 30-second polling granularity is
+an acceptable tradeoff for the simplicity of not building a delay-queue or
+timer-per-order mechanism. This is also the one case in the whole system
+where a scheduled poller is the *right* tool (contrast with `main`'s
+`ADR-4`, which explicitly rejected polling for the OFFLINE trigger) —
+there's no discrete event to react to when the thing that changed is just
+elapsed time.

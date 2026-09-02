@@ -1,7 +1,7 @@
 export type AgentStatus = 'AVAILABLE' | 'BUSY' | 'OFFLINE';
 export type OrderStatus = 'ASSIGNED' | 'REASSIGNMENT_PENDING' | 'REASSIGNED' | 'DELIVERED';
 export type SuggestionStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
-export type TriggerReason = 'INITIAL' | 'AGENT_OFFLINE';
+export type TriggerReason = 'INITIAL' | 'AGENT_OFFLINE' | 'SLA_AT_RISK';
 
 export interface Agent {
   id: string;

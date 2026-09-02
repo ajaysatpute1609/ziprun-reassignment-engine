@@ -98,6 +98,11 @@
   color: #3730a3;
 }
 
+.badge-sla {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
 .order-id {
   font-weight: 700;
   color: #0056b3;

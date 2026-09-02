@@ -72,6 +72,18 @@ export class OpsBoardComponent implements OnInit, OnDestroy {
     });
   }
 
+  badgeClass(s: ReassignmentSuggestion): string {
+    if (s.triggerReason === 'AGENT_OFFLINE') return 'badge-auto';
+    if (s.triggerReason === 'SLA_AT_RISK') return 'badge-sla';
+    return 'badge-manual';
+  }
+
+  badgeLabel(s: ReassignmentSuggestion): string {
+    if (s.triggerReason === 'AGENT_OFFLINE') return 'Auto re-plan';
+    if (s.triggerReason === 'SLA_AT_RISK') return 'SLA risk';
+    return 'Manual';
+  }
+
   orderFor(orderId: string): Order | undefined {
     return this.orders.find((o) => o.id === orderId);
   }
