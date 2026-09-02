@@ -8,9 +8,9 @@ A production-style Spring Boot backend with an Angular dashboard. It detects str
 
 ## Demo Video
 
-A complete end-to-end walkthrough is available in the repository:
+A complete end-to-end walkthrough is available here:
 
-**File:** `Demo_Video.mp4`
+**Link:** [ZipRun AI Reassignment Engine — Demo Video](https://drive.google.com/file/d/1NpqjxEEKqaMED3gzhRpJ7PrA3-ueYI-s/view?usp=drive_link)
 
 This video demonstrates:
 - The Angular ops board with live agent load bars and SLA countdowns
@@ -434,7 +434,7 @@ routing.strategy=${ROUTING_STRATEGY:rule}
 
 ## Demo Flow
 
-> For a recorded walkthrough, see **`Demo_Video.mp4`** in the repository root.
+> For a recorded walkthrough, see the **[Demo Video](https://drive.google.com/file/d/1NpqjxEEKqaMED3gzhRpJ7PrA3-ueYI-s/view?usp=drive_link)**.
 
 1. Open **http://localhost:4200**.
 2. The **Ops Board** shows agents, pending suggestions, and orders.
