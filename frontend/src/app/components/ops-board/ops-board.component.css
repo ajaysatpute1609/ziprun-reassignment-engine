@@ -98,6 +98,11 @@
   color: #3730a3;
 }
 
+.badge-sla {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
 .order-id {
   font-weight: 700;
   color: #0056b3;
@@ -222,4 +227,59 @@ button:disabled {
 
 .btn-small:hover {
   background: #f3f4f6;
+}
+
+.stream-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.stream-text {
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  background: #0f172a;
+  color: #a7f3d0;
+  padding: 14px 16px;
+  border-radius: 6px;
+  min-height: 60px;
+  white-space: pre-wrap;
+  margin-bottom: 10px;
+}
+
+.cursor {
+  animation: blink 1s step-start infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.stream-result {
+  font-size: 13px;
+  color: #374151;
+  background: #f0fdf4;
+  padding: 10px 14px;
+  border-radius: 6px;
+}
+
+.order-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.order-row:last-child {
+  border-bottom: none;
+}
+
+.order-row-desc {
+  flex: 1;
+  color: #4b5563;
+  font-size: 13px;
 }

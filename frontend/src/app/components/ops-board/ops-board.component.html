@@ -13,9 +13,7 @@
 
     <div class="suggestion-card" *ngFor="let s of suggestions">
       <div class="suggestion-top">
-        <span class="badge" [ngClass]="s.triggerReason === 'AGENT_OFFLINE' ? 'badge-auto' : 'badge-manual'">
-          {{ s.triggerReason === 'AGENT_OFFLINE' ? 'Auto re-plan' : 'Manual' }}
-        </span>
+        <span class="badge" [ngClass]="badgeClass(s)">{{ badgeLabel(s) }}</span>
         <span class="order-id">{{ s.orderId }}</span>
         <span class="confidence">Confidence: {{ (s.confidence * 100).toFixed(0) }}%</span>
       </div>
@@ -34,6 +32,29 @@
         <button class="btn-accept" [disabled]="actionInFlight === s.id" (click)="accept(s)">Accept</button>
         <button class="btn-reject" [disabled]="actionInFlight === s.id" (click)="reject(s)">Reject</button>
       </div>
+    </div>
+  </section>
+
+  <section class="panel" *ngIf="streamingOrderId">
+    <div class="stream-header">
+      <h2>Live AI Reasoning — {{ streamingOrderId }}</h2>
+      <button class="btn-small" (click)="closeStreamingPanel()">Close</button>
+    </div>
+    <div class="stream-text">{{ streamingText }}<span class="cursor" *ngIf="!streamingSuggestion">▍</span></div>
+    <div class="banner error" *ngIf="streamingNote">{{ streamingNote }}</div>
+    <div class="stream-result" *ngIf="streamingSuggestion">
+      Final: <strong>{{ agentName(streamingSuggestion.recommendedAgentId) }}</strong>
+      (confidence {{ (streamingSuggestion.confidence * 100).toFixed(0) }}%) — persisted as a pending suggestion above.
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Assigned Orders — Trigger AI Suggestion</h2>
+    <div *ngIf="!assignedOrders().length" class="empty">No assigned orders right now.</div>
+    <div class="order-row" *ngFor="let o of assignedOrders()">
+      <span class="order-id">{{ o.id }}</span>
+      <span class="order-row-desc">{{ o.description }}</span>
+      <button class="btn-small" (click)="streamSuggestion(o.id)">Stream AI Suggestion</button>
     </div>
   </section>
 

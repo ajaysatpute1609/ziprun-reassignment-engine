@@ -35,4 +35,10 @@ public class Agent {
   // not yet enforced by any routing strategy.
   @Column(name = "max_capacity")
   private Integer maxCapacity;
+
+  // Sprint 2: whether this agent's vehicle/equipment can carry HEAVY orders.
+  // Enforced by AgentEligibilityFilter. Defaults true so existing agents
+  // remain eligible for everything unless explicitly restricted.
+  @Column(name = "can_handle_heavy", nullable = false)
+  private boolean canHandleHeavy = true;
 }

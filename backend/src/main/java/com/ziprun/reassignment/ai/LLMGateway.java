@@ -1,7 +1,16 @@
 package com.ziprun.reassignment.ai;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -70,6 +79,83 @@ public class LLMGateway {
     } catch (Exception e) {
       throw new RuntimeException("Gemini response parse failed", e);
     }
+  }
+
+  /**
+   * Streams the LLM's response token-by-token via Server-Sent Events,
+   * invoking {@code onToken} for each content fragment as it arrives.
+   * Bonus feature (T-3): only implemented for the groq provider's
+   * OpenAI-compatible streaming format ({@code "stream": true}).
+   * Uses the JDK's HttpClient with a line-based body handler so lines are
+   * delivered as the response streams in, rather than after the full
+   * response is buffered.
+   */
+  public void streamLLM(String prompt, Consumer<String> onToken) throws IOException, InterruptedException {
+    if (!"groq".equalsIgnoreCase(provider)) {
+      throw new UnsupportedOperationException(
+          "Streaming is only implemented for the groq provider (configured provider: " + provider + ")");
+    }
+
+    String url = baseUrl + "/openai/v1/chat/completions";
+    Map<String, Object> body =
+        Map.of(
+            "model", model,
+            "stream", true,
+            "messages", List.of(Map.of("role", "user", "content", prompt)));
+
+    ObjectMapper mapper = new ObjectMapper();
+    String json;
+    try {
+      json = mapper.writeValueAsString(body);
+    } catch (Exception e) {
+      throw new IOException("Failed to serialize streaming request body", e);
+    }
+
+    HttpClient client =
+        HttpClient.newBuilder().connectTimeout(Duration.ofMillis(timeoutMs)).build();
+    HttpRequest request =
+        HttpRequest.newBuilder()
+            .uri(URI.create(url))
+            .timeout(Duration.ofMillis((long) timeoutMs * 4))
+            .header("Content-Type", "application/json")
+            .header("Authorization", "Bearer " + apiKey)
+            .POST(HttpRequest.BodyPublishers.ofString(json))
+            .build();
+
+    HttpResponse<java.util.stream.Stream<String>> response =
+        client.send(request, HttpResponse.BodyHandlers.ofLines());
+
+    if (response.statusCode() >= 400) {
+      throw new IOException("Groq streaming request failed with HTTP " + response.statusCode());
+    }
+
+    response
+        .body()
+        .forEach(
+            line -> {
+              if (!line.startsWith("data:")) {
+                return;
+              }
+              String data = line.substring(5).trim();
+              if (data.equals("[DONE]") || data.isEmpty()) {
+                return;
+              }
+              try {
+                JsonNode node = mapper.readTree(data);
+                JsonNode choices = node.get("choices");
+                if (choices != null && choices.size() > 0) {
+                  JsonNode delta = choices.get(0).get("delta");
+                  if (delta != null && delta.has("content")) {
+                    String token = delta.get("content").asText();
+                    if (!token.isEmpty()) {
+                      onToken.accept(token);
+                    }
+                  }
+                }
+              } catch (Exception ignored) {
+                // Malformed SSE chunk — skip it, don't abort the whole stream over one bad line.
+              }
+            });
   }
 
   private String callOpenAICompatible(String prompt, String url) {
