@@ -122,6 +122,15 @@ tradeoff for a 5-hour build; a production version would likely distinguish
 retryable failures (timeout) from non-retryable ones (hallucinated id) and
 only retry the former.
 
+**Verified live.** Tested against the real Groq API: an initial
+misconfigured model name produced a `404 model_not_found` from Groq, which
+was caught and logged by `ReassignmentService`, and the endpoint still
+returned a valid rule-based suggestion rather than an error — confirming the
+fallback path works against real failures, not just mocked ones. After
+fixing the model name, both the initial-assignment and agent-offline re-plan
+prompts were confirmed to produce genuinely different, situation-appropriate
+reasoning text (see git history / demo video for the actual responses).
+
 ---
 
 ## ADR-4: How is the agentic loop triggered and kept off the request path?

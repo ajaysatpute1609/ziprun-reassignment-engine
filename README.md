@@ -29,6 +29,12 @@ docker run -d --name ziprun-postgres -e POSTGRES_USER=ziprun -e POSTGRES_PASSWOR
 $env:LLM_API_KEY="your-groq-api-key-here"
 ```
 
+The configured model is `openai/gpt-oss-20b` (fast, JSON-mode capable, available
+on the free Groq tier at the time of writing). Groq's available model list is
+account-specific and changes — if you get a `model_not_found` error, check
+`GET https://api.groq.com/openai/v1/models` with your key and update
+`llm.model` in `application.properties`.
+
 ### 3. Run the backend
 
 ```bash
