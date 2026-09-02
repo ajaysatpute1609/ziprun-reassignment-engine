@@ -6,7 +6,7 @@ A reactive reassignment engine: when a delivery agent goes offline, the system a
 
 - **Backend:** Java 21, Spring Boot 3.x, Spring Data JPA, PostgreSQL
 - **Frontend:** Angular 17
-- **AI:** Groq (Llama 3.1) via a lightweight LLM gateway
+- **AI:** Groq (`openai/gpt-oss-20b`, configurable) via a lightweight LLM gateway
 
 ## Prerequisites
 
@@ -56,10 +56,12 @@ Frontend runs on **http://localhost:4200**.
 
 ## Demo flow
 
-1. Open http://localhost:4200 — see the agent roster and order list.
-2. Flip an agent with active orders to `OFFLINE`.
-3. Watch reassignment suggestions appear automatically (poll/refresh) with an "Auto re-plan" badge, AI reasoning, and confidence score.
-4. Accept or reject the suggestion.
+1. Open http://localhost:4200 — see the agent roster and pending suggestions in **Ops View**.
+2. Flip an agent with active orders to `OFFLINE` ("Flip Offline" button).
+3. Watch reassignment suggestions appear automatically (poll/refresh, ~5s) with an "Auto re-plan" badge, AI reasoning, and confidence score.
+4. Accept or reject the suggestion — accepted orders move to `REASSIGNED`.
+5. Flip the same agent offline again — no duplicate suggestions appear (idempotency).
+6. Switch to the **Full Dispatch Board** tab to see all orders across all statuses, SLA countdowns (green/amber/red), agent load bars, and zones.
 
 ## API Endpoints
 
