@@ -61,9 +61,28 @@ Frontend runs on **http://localhost:4200**.
 |--------|----------|--------------|
 | POST | `/orders` | Create a pre-assigned order |
 | GET | `/orders?status=` | List orders, filterable by status |
+| GET | `/agents` | List all agents |
 | PATCH | `/agents/{id}/status` | Update agent availability (triggers agentic loop on OFFLINE) |
 | POST | `/orders/{id}/suggest` | Run active routing strategy on demand |
+| GET | `/suggestions` | List all suggestions |
 | PATCH | `/suggestions/{id}` | Accept or reject a suggestion |
+| GET | `/actuator/health` | Health check |
+
+## Switching routing strategy at runtime
+
+```powershell
+$env:ROUTING_STRATEGY="ai"   # or "rule" — no restart needed, resolved per-call
+```
+
+## Verified end-to-end (manual test log)
+
+- `POST /orders/{id}/suggest` → rule-based recommendation persisted.
+- `PATCH /agents/AGT-005/status {OFFLINE}` → returns immediately; async listener
+  (visible in logs on a `reassign-*` thread, not the request thread) creates
+  `AGENT_OFFLINE` suggestions for all 3 stranded orders.
+- Repeating the same PATCH → no duplicate suggestions (idempotency guard).
+- `PATCH /suggestions/{id} {ACCEPTED}` → order flips to `REASSIGNED` with the
+  recommended agent.
 
 ## Architecture
 

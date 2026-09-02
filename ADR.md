@@ -172,4 +172,40 @@ failures.
 
 ## ADR-5: What did you design to extend, and what did you deliberately leave for later?
 
-_(to be written near the end)_
+**Extensibility seam.** Sprint 2's `ZoneAffinityStrategy` plugs in at exactly
+one point: implement `RoutingStrategy.recommend(Order, List<Agent>,
+RoutingContext)` and annotate the class `@Component("zone")`. Nothing in
+`RoutingStrategyResolver`, `ReassignmentService`, `OrderController`, or
+`AgentOfflineListener` changes — the resolver's injected
+`Map<String, RoutingStrategy>` picks it up automatically, and switching to it
+is a one-line config change (`routing.strategy=zone` / `ROUTING_STRATEGY=zone`
+env var), no restart. The `Agent.currentZone` field already exists (nullable,
+unused by the two current strategies) specifically so this sprint 2 change is
+additive rather than a migration — `ZoneAffinityStrategy` just starts reading
+a column that's already there. The same seam is why sprint 3's proactive
+SLA-breach loop is straightforward to add on the trigger side too: it would
+publish a new event type (e.g. `SlaBreachImminentEvent`) consumed by a
+listener that calls the exact same `ReassignmentService.suggestForOrder()`
+used today — the event mechanism doesn't care whether the trigger was an
+agent going offline or a scheduled SLA monitor, because `RoutingContext`
+already models "why is this suggestion happening" as data, not as a fixed
+enum tied to one scenario.
+
+**Deliberate exclusions.**
+- **SSE streaming (`/orders/{id}/suggest/stream`) — not built.** This is a
+  pure UX enhancement (watching tokens arrive) with zero effect on
+  correctness; the agentic loop and its fallback behavior are a correctness
+  requirement and got the time instead.
+- **UI ceiling (full dispatch board, SLA countdown, agent load chart, zone
+  roster) — not built.** The brief is explicit that this is primarily a
+  backend/systems design screen; a clean, fully-working floor (reassignment
+  queue, badges, accept/reject, agent roster, polling, loading/error states)
+  demonstrates the agentic loop end-to-end, which is the thing actually being
+  evaluated. An ambitious but partially-working ceiling would have traded
+  against backend robustness for a lower-weighted area.
+- **Capacity/weight-class constraints (sprint 2) — not built.** Both current
+  strategies assume any available agent can take any order. Adding
+  `Agent.maxCapacity` and `Order.weightClass` now would be pure speculative
+  schema without a strategy that reads them yet, which is exactly the kind of
+  premature complexity the brief warns against — better to add the column
+  when the strategy that needs it exists.
