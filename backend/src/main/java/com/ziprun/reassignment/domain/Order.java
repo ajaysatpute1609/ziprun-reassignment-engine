@@ -35,4 +35,20 @@ public class Order {
   // countdown display — nothing schedules against it yet.
   @Column(name = "sla_deadline")
   private Instant slaDeadline;
+
+  // Sprint 2: read by ZoneAffinityStrategy to prefer agents already near
+  // the pickup zone. Nullable — orders without zone data still route fine
+  // via load-based strategies.
+  @Column(name = "pickup_zone")
+  private String pickupZone;
+
+  @Column(name = "dropoff_zone")
+  private String dropoffZone;
+
+  // Sprint 2: enforced by AgentEligibilityFilter — HEAVY orders only route
+  // to agents with canHandleHeavy = true. Defaults to LIGHT so existing
+  // orders/tests are unaffected.
+  @Enumerated(EnumType.STRING)
+  @Column(name = "weight_class", nullable = false)
+  private WeightClass weightClass = WeightClass.LIGHT;
 }

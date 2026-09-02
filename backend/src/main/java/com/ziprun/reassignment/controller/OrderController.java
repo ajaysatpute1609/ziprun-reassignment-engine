@@ -3,6 +3,7 @@ package com.ziprun.reassignment.controller;
 import com.ziprun.reassignment.domain.Order;
 import com.ziprun.reassignment.domain.OrderStatus;
 import com.ziprun.reassignment.domain.ReassignmentSuggestion;
+import com.ziprun.reassignment.domain.WeightClass;
 import com.ziprun.reassignment.dto.CreateOrderRequest;
 import com.ziprun.reassignment.repository.AgentRepository;
 import com.ziprun.reassignment.repository.OrderRepository;
@@ -47,6 +48,10 @@ public class OrderController {
     order.setStatus(OrderStatus.ASSIGNED);
     order.setCreatedAt(Instant.now());
     order.setSlaDeadline(Instant.now().plus(45, ChronoUnit.MINUTES));
+    order.setPickupZone(request.getPickupZone());
+    order.setDropoffZone(request.getDropoffZone());
+    order.setWeightClass(
+        request.getWeightClass() != null ? request.getWeightClass() : WeightClass.LIGHT);
 
     return ResponseEntity.status(HttpStatus.CREATED).body(orderRepository.save(order));
   }

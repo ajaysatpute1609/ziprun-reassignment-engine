@@ -4,6 +4,7 @@ import com.ziprun.reassignment.domain.*;
 import com.ziprun.reassignment.repository.AgentRepository;
 import com.ziprun.reassignment.repository.OrderRepository;
 import com.ziprun.reassignment.repository.ReassignmentSuggestionRepository;
+import com.ziprun.reassignment.routing.AgentEligibilityFilter;
 import com.ziprun.reassignment.routing.AgentRecommendation;
 import com.ziprun.reassignment.routing.RoutingContext;
 import com.ziprun.reassignment.routing.RoutingStrategy;
@@ -29,16 +30,19 @@ public class ReassignmentService {
   private final OrderRepository orderRepository;
   private final ReassignmentSuggestionRepository suggestionRepository;
   private final RoutingStrategyResolver strategyResolver;
+  private final AgentEligibilityFilter eligibilityFilter;
 
   public ReassignmentService(
       AgentRepository agentRepository,
       OrderRepository orderRepository,
       ReassignmentSuggestionRepository suggestionRepository,
-      RoutingStrategyResolver strategyResolver) {
+      RoutingStrategyResolver strategyResolver,
+      AgentEligibilityFilter eligibilityFilter) {
     this.agentRepository = agentRepository;
     this.orderRepository = orderRepository;
     this.suggestionRepository = suggestionRepository;
     this.strategyResolver = strategyResolver;
+    this.eligibilityFilter = eligibilityFilter;
   }
 
   /**
@@ -54,11 +58,17 @@ public class ReassignmentService {
             .orElseThrow(() -> new IllegalArgumentException("Unknown order: " + orderId));
 
     List<Agent> availableAgents = agentRepository.findByStatus(AgentStatus.AVAILABLE);
+    List<Agent> eligibleAgents = eligibilityFilter.eligibleFor(order, availableAgents);
+
+    if (eligibleAgents.isEmpty()) {
+      throw new IllegalStateException(
+          "No eligible agent for order " + orderId + " (capacity/weight-class constraints)");
+    }
 
     RoutingStrategy active = strategyResolver.active();
     List<AgentRecommendation> recommendations;
     try {
-      recommendations = active.recommend(order, availableAgents, context);
+      recommendations = active.recommend(order, eligibleAgents, context);
       if (recommendations.isEmpty()) {
         throw new IllegalStateException("Active strategy returned no recommendations");
       }
@@ -68,7 +78,7 @@ public class ReassignmentService {
           orderId,
           context.triggerReason(),
           e.getMessage());
-      recommendations = strategyResolver.fallback().recommend(order, availableAgents, context);
+      recommendations = strategyResolver.fallback().recommend(order, eligibleAgents, context);
     }
 
     AgentRecommendation top = recommendations.get(0);
