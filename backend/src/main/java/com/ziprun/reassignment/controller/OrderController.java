@@ -1,5 +1,6 @@
 package com.ziprun.reassignment.controller;
 
+import com.ziprun.reassignment.domain.Agent;
 import com.ziprun.reassignment.domain.Order;
 import com.ziprun.reassignment.domain.OrderStatus;
 import com.ziprun.reassignment.domain.ReassignmentSuggestion;
@@ -39,7 +40,8 @@ public class OrderController {
 
   @PostMapping
   public ResponseEntity<Order> createOrder(@Valid @RequestBody CreateOrderRequest request) {
-    if (!agentRepository.existsById(request.getAssignedAgentId())) {
+    Agent agent = agentRepository.findById(request.getAssignedAgentId()).orElse(null);
+    if (agent == null) {
       return ResponseEntity.badRequest().build();
     }
 
@@ -55,7 +57,16 @@ public class OrderController {
     order.setWeightClass(
         request.getWeightClass() != null ? request.getWeightClass() : WeightClass.LIGHT);
 
-    return ResponseEntity.status(HttpStatus.CREATED).body(orderRepository.save(order));
+    Order saved = orderRepository.save(order);
+
+    // Bugfix: this order now counts against the assigned agent's load —
+    // without this, every strategy's "lowest current load" comparison is
+    // stale from the moment an order is created, not just after a
+    // reassignment. See SPRINT2-ADR-6.
+    agent.setActiveOrderCount(agent.getActiveOrderCount() + 1);
+    agentRepository.save(agent);
+
+    return ResponseEntity.status(HttpStatus.CREATED).body(saved);
   }
 
   @GetMapping

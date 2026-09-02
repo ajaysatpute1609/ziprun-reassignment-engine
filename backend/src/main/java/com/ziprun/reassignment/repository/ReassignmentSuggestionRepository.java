@@ -14,4 +14,8 @@ public interface ReassignmentSuggestionRepository
   // for an order that already has a PENDING AGENT_OFFLINE suggestion.
   boolean existsByOrderIdAndTriggerReasonAndStatus(
       String orderId, TriggerReason triggerReason, SuggestionStatus status);
+
+  // Generic guard: don't allow two PENDING suggestions for the same order,
+  // which would double-reserve the recommended agent's capacity.
+  boolean existsByOrderIdAndStatus(String orderId, SuggestionStatus status);
 }

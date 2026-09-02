@@ -210,3 +210,38 @@ real token-by-token SSE output (individual JSON fragments like `agent`,
 frames), followed by a final `event: suggestion` frame with the parsed,
 validated, and persisted result — confirmed present via
 `GET /suggestions` afterward.
+
+---
+
+## SPRINT2-ADR-6: Bugfix — `Agent.activeOrderCount` must be maintained after seed data
+
+**Context.** Seed `data.sql` pre-populates `Agent.activeOrderCount` to match
+the seeded `Order` rows, but the codebase never incremented or decremented
+the counter after startup. Creating a new order did not add to the assigned
+agent's load, and accepting a `ReassignmentSuggestion` moved the order's
+`assignedAgentId` without moving the workload. This meant every routing
+strategy's "lowest current load" comparison, and the sprint 2
+`AgentEligibilityFilter` capacity check, operated on stale data. In effect,
+once an agent appeared lightly loaded in the seed, they kept being
+recommended forever regardless of how many orders were actually on them.
+
+**Fix.** Two places now atomically adjust the counter:
+1. `OrderController.createOrder()` fetches the assigned `Agent` and
+   increments `activeOrderCount` before returning the saved order.
+2. `ReassignmentService.resolveSuggestion()` — on `ACCEPTED` — decrements
+   the previous agent's count and increments the new agent's count. A new
+   private helper `adjustAgentLoad(agentId, delta)` floors the value at
+   `0` and silently ignores missing/null IDs. `REJECTED` leaves both
+   agents unchanged because no actual move occurs.
+
+**Verification.** Fresh backend, fresh DB seed:
+- `POST /orders` assigned to `AGT-001`: `AGT-001` went from 2 → 3.
+- `POST /orders/{id}/suggest` recommended `AGT-002` (lowest load).
+- `PATCH /suggestions/{id}` with `ACCEPTED`: `AGT-001` 3 → 2, `AGT-002`
+  0 → 1; order status became `REASSIGNED`.
+- Reject path verified: `AGT-003` count stayed unchanged after rejecting
+  a suggestion that targeted `AGT-004`.
+
+**Impact on existing branches.** This fix is applied **only to the
+`sprint-2-extensions` branch**. `main` was the submitted assessment
+snapshot and is intentionally left untouched.

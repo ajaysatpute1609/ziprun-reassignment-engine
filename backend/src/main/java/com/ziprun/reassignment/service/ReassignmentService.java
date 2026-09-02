@@ -77,7 +77,15 @@ public class ReassignmentService {
             .findById(orderId)
             .orElseThrow(() -> new IllegalArgumentException("Unknown order: " + orderId));
 
-    List<Agent> availableAgents = agentRepository.findByStatus(AgentStatus.AVAILABLE);
+    // Don't allow two PENDING suggestions for the same order: each pending
+    // suggestion reserves capacity on a recommended agent, and overlapping
+    // reservations would make load-balancing decisions stale.
+    if (suggestionRepository.existsByOrderIdAndStatus(order.getId(), SuggestionStatus.PENDING)) {
+      throw new IllegalStateException(
+          "A pending suggestion already exists for order " + orderId + "; resolve it first");
+    }
+
+    List<Agent> availableAgents = agentRepository.findByStatusNot(AgentStatus.OFFLINE);
     List<Agent> eligibleAgents = eligibilityFilter.eligibleFor(order, availableAgents);
 
     if (eligibleAgents.isEmpty()) {
@@ -117,7 +125,15 @@ public class ReassignmentService {
     order.setStatus(OrderStatus.REASSIGNMENT_PENDING);
     orderRepository.save(order);
 
-    return suggestionRepository.save(suggestion);
+    ReassignmentSuggestion saved = suggestionRepository.save(suggestion);
+
+    // Reserve capacity on the recommended agent immediately. Without this,
+    // a batch of stranded orders (e.g. an agent going offline with 3
+    // orders) all get routed to the same lowest-load agent because the
+    // previous suggestion's load is not reflected until it is accepted.
+    adjustAgentLoad(top.agentId(), +1);
+
+    return saved;
   }
 
   /**
@@ -140,7 +156,7 @@ public class ReassignmentService {
               .findById(orderId)
               .orElseThrow(() -> new IllegalArgumentException("Unknown order: " + orderId));
 
-      List<Agent> availableAgents = agentRepository.findByStatus(AgentStatus.AVAILABLE);
+      List<Agent> availableAgents = agentRepository.findByStatusNot(AgentStatus.OFFLINE);
       List<Agent> eligibleAgents = eligibilityFilter.eligibleFor(order, availableAgents);
 
       if (eligibleAgents.isEmpty()) {
@@ -215,14 +231,44 @@ public class ReassignmentService {
     orderOpt.ifPresent(
         order -> {
           if (newStatus == SuggestionStatus.ACCEPTED) {
-            order.setAssignedAgentId(suggestion.getRecommendedAgentId());
+            String previousAgentId = order.getAssignedAgentId();
+            String newAgentId = suggestion.getRecommendedAgentId();
+
+            // Bugfix (SPRINT2-ADR-6): accepting a suggestion moves the
+            // order's workload from one agent to another. The new agent's
+            // capacity was already reserved when the suggestion was created
+            // (see persist()), so we only decrement the previous agent here.
+            // Without decrementing the previous agent, the old agent would keep
+            // appearing over-loaded forever.
+            if (!java.util.Objects.equals(previousAgentId, newAgentId)) {
+              adjustAgentLoad(previousAgentId, -1);
+            }
+
+            order.setAssignedAgentId(newAgentId);
             order.setStatus(OrderStatus.REASSIGNED);
           } else if (newStatus == SuggestionStatus.REJECTED) {
+            // Suggestion was pending, so we had reserved capacity on the
+            // recommended agent. Release that reservation and hand the
+            // order back to the original agent.
+            adjustAgentLoad(suggestion.getRecommendedAgentId(), -1);
             order.setStatus(OrderStatus.ASSIGNED);
           }
           orderRepository.save(order);
         });
 
     return suggestion;
+  }
+
+  private void adjustAgentLoad(String agentId, int delta) {
+    if (agentId == null) {
+      return;
+    }
+    agentRepository
+        .findById(agentId)
+        .ifPresent(
+            agent -> {
+              agent.setActiveOrderCount(Math.max(0, agent.getActiveOrderCount() + delta));
+              agentRepository.save(agent);
+            });
   }
 }
