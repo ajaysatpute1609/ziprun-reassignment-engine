@@ -1,0 +1,70 @@
+<div class="board">
+  <div class="board-header">
+    <h1>ZipRun Ops Board</h1>
+    <button class="btn-refresh" (click)="refresh()">Refresh</button>
+  </div>
+
+  <div *ngIf="error" class="banner error">{{ error }}</div>
+  <div *ngIf="loading && !suggestions.length && !agents.length" class="banner loading">Loading...</div>
+
+  <section class="panel">
+    <h2>Pending Reassignment Suggestions</h2>
+    <div *ngIf="!suggestions.length && !loading" class="empty">No pending suggestions right now.</div>
+
+    <div class="suggestion-card" *ngFor="let s of suggestions">
+      <div class="suggestion-top">
+        <span class="badge" [ngClass]="s.triggerReason === 'AGENT_OFFLINE' ? 'badge-auto' : 'badge-manual'">
+          {{ s.triggerReason === 'AGENT_OFFLINE' ? 'Auto re-plan' : 'Manual' }}
+        </span>
+        <span class="order-id">{{ s.orderId }}</span>
+        <span class="confidence">Confidence: {{ (s.confidence * 100).toFixed(0) }}%</span>
+      </div>
+
+      <div class="order-desc" *ngIf="orderFor(s.orderId)">
+        {{ orderFor(s.orderId)?.description }}
+      </div>
+
+      <div class="recommendation">
+        Recommended: <strong>{{ agentName(s.recommendedAgentId) }}</strong> ({{ s.recommendedAgentId }})
+      </div>
+
+      <div class="reasoning">"{{ s.reasoning }}"</div>
+
+      <div class="actions">
+        <button class="btn-accept" [disabled]="actionInFlight === s.id" (click)="accept(s)">Accept</button>
+        <button class="btn-reject" [disabled]="actionInFlight === s.id" (click)="reject(s)">Reject</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Agent Roster</h2>
+    <table class="agent-table">
+      <thead>
+        <tr>
+          <th>Agent</th>
+          <th>Active Orders</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let a of agents">
+          <td>{{ a.name }} <span class="muted">({{ a.id }})</span></td>
+          <td>{{ a.activeOrderCount }}</td>
+          <td>
+            <span class="status-pill" [ngClass]="'status-' + a.status.toLowerCase()">{{ a.status }}</span>
+          </td>
+          <td>
+            <button class="btn-small" *ngIf="a.status !== 'OFFLINE'" (click)="setAgentOffline(a)">
+              Flip Offline
+            </button>
+            <button class="btn-small" *ngIf="a.status === 'OFFLINE'" (click)="setAgentStatus(a, 'AVAILABLE')">
+              Bring Back
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+</div>
